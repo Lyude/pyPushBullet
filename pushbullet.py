@@ -346,6 +346,14 @@ class PushBullet(object):
 
         return resp
 
+    # Grabs the user's identifier from pushbullet and caches it if we don't
+    # have it
+    def _get_user_iden(self):
+        if not hasattr(self, '_user_iden'):
+            self._user_iden = User.get(self)['iden']
+
+        return self._user_iden
+
     def _encrypt(self, data):
         iv = os.urandom(12)
         cipher = Cipher(self._crypto_algo, modes.GCM(iv), default_backend())
@@ -393,7 +401,7 @@ class PushBullet(object):
             return
 
         kdf = PBKDF2HMAC(hashes.SHA256(), 32,
-                         bytes(User.get(self)['iden'], 'utf-8'), 30000,
+                         bytes(self._get_user_iden(), 'utf-8'), 30000,
                          backend=default_backend())
         self._crypto_algo = algorithms.AES(kdf.derive(bytes(password, 'utf-8')))
 
