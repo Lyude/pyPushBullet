@@ -309,6 +309,15 @@ class PushBullet(object):
 
         self.set_e2e_key(e2e_key)
 
+    class _JSONEncoder(json.JSONEncoder):
+        def default(self, obj):
+            if isinstance(obj, bytes):
+                return str(b64encode(obj), 'utf-8')
+            else:
+                return obj
+
+    _encoder = _JSONEncoder()
+
     def _request(self, method, path, postdata=None, params=None, files=None, encrypted_fields=None):
         headers = {
             'Accept': "application/json",
@@ -325,7 +334,8 @@ class PushBullet(object):
 
         if encrypted_fields and self._crypto_algo:
             for field in encrypted_fields:
-                encrypted_data = self._encrypt(json.dumps(postdata[field]))
+                encrypted_data = self._encrypt(
+                    self._encoder.encode(postdata[field]))
 
                 postdata[field] = {'ciphertext': encrypted_data,
                                    'encrypted': True}
@@ -333,7 +343,7 @@ class PushBullet(object):
         r = requests.request(
             method,
             self.base_url+path,
-            data=json.dumps(postdata) if postdata else None,
+            data=self._encoder.encode(postdata) if postdata else None,
             params=params,
             headers=headers,
             files=files,
@@ -365,7 +375,7 @@ class PushBullet(object):
         encoded_message = bytes(str(ENCRYPTION_VERSION), 'utf-8') + \
                           encryptor.tag + iv + data
 
-        return str(b64encode(encoded_message), 'utf-8')
+        return encoded_message
 
     def _decrypt(self, b64_data):
         data = bytearray(b64decode(b64_data))
