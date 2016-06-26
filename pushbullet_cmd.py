@@ -176,4 +176,9 @@ pb = pushbullet.PushBullet(args.api_key)
 if 'password' in args:
     pb.set_e2e_key(args.password)
 
+# If no action was specified
+if not hasattr(args, 'func'):
+    parser.print_help(file=sys.stderr)
+    sys.exit(1)
+
 args.func(args)
