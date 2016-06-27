@@ -209,13 +209,13 @@ class User(_Object):
         This class represents the current user, see
         https://docs.pushbullet.com/v2/#users
     """
+    writable_attributes = [
+        'email',
+        'name',
+        'image_url',
+        'preferences'
+    ]
     path="users"
-
-    def __setitem__(self, key, value):
-        raise AttributeError("'User' object has no attribute '__setitem__'")
-
-    def commit(self):
-        raise AttributeError("'User' object has no attribute 'commit'")
 
     def delete(self):
         raise AttributeError("'User' object has no attribute 'delete'")
