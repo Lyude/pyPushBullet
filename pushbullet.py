@@ -26,11 +26,13 @@ import requests
 import json
 import os
 import pprint
+import random
 from os.path import basename
 from websocket import create_connection
 from textwrap import TextWrapper
 from requests import HTTPError
 from base64 import b64encode, b64decode
+from copy import copy
 
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -202,26 +204,6 @@ class Push(_Object):
         self.attrs['dismissed'] = True
         return self.commit()
 
-class Ephemeral(_Object):
-    """
-        This class represents an ephemeral, see https://docs.pushbullet.com/v2/#ephemerals
-    """
-    def dismiss(self):
-        if "notification_tag" in self:
-            notification_tag = self["notification_tag"]
-        else:
-            notification_tag = None
-
-        data = {"push": {"package_name": self["package_name"],
-                         "source_user_iden": self["source_user_iden"],
-                         "notification_tag": notification_tag,
-                         "notification_id": self["notification_id"],
-                         "type": "dismissal"},
-                "type": "push"}
-
-        return self.pb._request('POST', 'ephemerals', data,
-                                encrypted_fields=['push'])
-
 class User(_Object):
     """
         This class represents the current user, see
@@ -241,6 +223,56 @@ class User(_Object):
     @classmethod
     def get(cls, pb):
         return super().get(pb, "me")
+
+
+class _Ephemeral(object):
+    def __init__(self, pb, **kwargs):
+        if type(self) == _Ephemeral:
+            raise NotImplementedError('This is a prototype')
+
+        self.pb = pb
+        self._attrs = kwargs
+
+    def __getitem__(self, key):
+        return self._attrs[key]
+
+    def __setitem__(self, key, value):
+        raise TypeError("Ephemerals are read-only")
+
+    def __contains__(self, key):
+        return key in self._attrs
+
+    @classmethod
+    def _push(cls, pb, data):
+        push_data = copy(data)
+        push_data['type'] = cls.pb_type
+
+        data = {'type': 'push',
+                'push': push_data}
+
+        return pb._request('POST', 'ephemerals', data, encrypted_fields=['push'])
+
+
+class MirroredNotification(_Ephemeral):
+    """
+        This class represents a mirrored notification, see https://docs.pushbullet.com/v2/#ephemerals
+    """
+    pb_type = 'mirror'
+
+    def dismiss(self):
+        if 'notification_tag' in self:
+            notification_tag = self['notification_tag']
+        else:
+            notification_tag = None
+
+        return MirroredNotification._push(
+            self.pb,
+            {'package_name': self['package_name'],
+             'source_user_iden': self['source_user_iden'],
+             'notification_tag': notification_tag,
+             'notification_id': self['notification_id'],
+             'type': 'dismissal'}
+        )
 
 
 class RealTime(object):
@@ -296,7 +328,7 @@ class RealTime(object):
             return Push(self.pb, **self._push_cache.pop())
 
         elif data['type'] == "push" and data['push']['type'] == "mirror":
-            return Ephemeral(self.pb, **data['push'])
+            return MirroredNotification(self.pb, **data['push'])
 
         return Push(self.pb, **data["push"])
 
@@ -552,6 +584,40 @@ class PushBullet(object):
         }
         response = self._request("POST", "pushes", data)
         return Push(self, **response)
+
+    """
+        Sends a mirrored notification and returns a MirroredNotification
+        https://docs.pushbullet.com/v2/#mirrored-notifications
+
+        Arguments:
+        title -- The title of the notification.
+        body -- The body of the notification.
+        icon -- Base64-encoded JPEG image to use as the icon of the push.
+        application_name -- The name of the application that created the notification.
+        dismissible -- True if the notification can be dismissed.
+        package_name -- The package that made the notification, used when updating/dismissing an existing notification.
+        client_version -- The client version of the app sending this message.
+    """
+    def push_notification(self, body, title, icon=None, source_device=None,
+                          application_name=None, dismissible=True,
+                          package_name=None, client_version=None):
+        if isinstance(source_device, Device):
+            source_device = source_device['iden']
+
+        data = {'title': title,
+                'body': body,
+                'icon': icon,
+                'source_user_iden': self._get_user_iden(),
+                'source_device_iden': source_device,
+                'application_name': application_name,
+                'dismissible': dismissible,
+                'package_name': package_name,
+                'notification_id': str(random.randint(0, 99999)),
+                'notification_tag': None}
+
+        MirroredNotification._push(self, data)
+
+        return MirroredNotification(self, **data)
 
     def list_pushes(self, modified_after=None, active=None, cursor=None, limit=15):
         """

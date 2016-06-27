@@ -23,12 +23,14 @@
 # OR OTHER DEALINGS IN THE SOFTWARE.
 
 import argparse
+from argparse import FileType
 import sys
 import json
 import os
 import pushbullet
 from pprint import pprint
 from requests.exceptions import HTTPError
+from base64 import b64encode
 
 pb = None
 
@@ -115,6 +117,18 @@ def push_file(args):
 def get_user(args):
     pprint(pushbullet.User.get(pb).attrs)
 
+def send_notification(args):
+    dismissible = args.dismissible \
+            if 'dismissible' in args else True
+    source_device = pushbullet.Device(pb, iden=args.source_device) \
+            if 'source_device' in args else None
+
+    notification = pb.push_notification(args.body, args.title,
+                                        dismissible=dismissible,
+                                        source_device=source_device,
+                                        application_name='pypushbullet_cmd')
+
+    pprint(notification._attrs)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('api_key',    metavar=None, type=str, help='The API key to use')
@@ -166,6 +180,13 @@ file.add_argument('device', type=str, help="The device ID")
 file.add_argument('file',   type=str, help="The path to the file")
 file.add_argument('body',   type=str, help="A message to include with the file", nargs=argparse.REMAINDER)
 file.set_defaults(func=push_file)
+
+notification_send = subparser.add_parser('send-notification', help='Send an notification')
+notification_send.add_argument('title',           type=str,  help='The title of the notification')
+notification_send.add_argument('body',            type=str,  help='The body of the notification')
+notification_send.add_argument('--dismissible',   type=bool, help='Whether or not the notification can be dismissed')
+notification_send.add_argument('--source-device', type=str,  help='The iden of the device sending the notification')
+notification_send.set_defaults(func=send_notification)
 
 user = subparser.add_parser('get-user', help='Get info on the current user', add_help=True)
 user.set_defaults(func=get_user)
