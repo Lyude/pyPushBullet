@@ -88,6 +88,24 @@ class _Object(object):
             raise e
 
     def commit(self):
+        """
+            Update the attributes of this object on the PushBullet server
+            using the ones we have cached locally. If the object does not exist
+            on the PushBullet server, create it.
+
+            An example of creating a device on the server
+                device = pushbullet.Device(pb, nickname="Lyude's Phone",
+                                           model="Sony Xperia Z3",
+                                           type="phone")
+                device.commit()
+
+            An example of changing the name of a device on the PushBullet
+            server:
+
+                device['name'] = "Lyude's laptop"
+                device.commit()
+        """
+
         data = dict()
         for attribute in self.writable_attributes:
             if attribute in self:
@@ -106,12 +124,23 @@ class _Object(object):
 
     @classmethod
     def get(cls, pb, iden):
+        """
+            Retrieves an object from the PushBullet server using it's iden,
+            then returns it.
+
+            Arguments:
+            pb -- The PushBullet instance to use for retreiving the object
+            iden -- The identifier of the object on the PushBullet server
+        """
         try:
             return cls(pb, **pb._request('GET', '%s/%s' % (cls.path, iden)))
         except HTTPError as e:
             cls._handle_http_error(e, iden)
 
     def delete(self):
+        """
+            Deletes the object from the PushBullet server
+        """
         try:
             return self.pb._request("DELETE", "%s/%s" % (self.path, self['iden']))
         except HTTPError as e:
@@ -180,9 +209,11 @@ class Device(_Object):
             https://docs.pushbullet.com/#create-push
 
             Arguments:
-            file -- The file to push, can either be a file object or a file path (as a string)
+            file -- The file to push, can either be a file object or a file
+                    path (as a string)
             file_name -- The name of the file
-            file_type -- The MIME type of the file, if not specified, magic will be used to attempt to guess.
+            file_type -- The MIME type of the file, if not specified, magic
+                         will be used to attempt to guess.
             body -- A message associated to go with the file
         """
         return self.pb.push_file(
@@ -222,6 +253,9 @@ class User(_Object):
 
     @classmethod
     def get(cls, pb):
+        """
+            Returns the current PushBullet user
+        """
         return super().get(pb, "me")
 
 
@@ -255,11 +289,15 @@ class _Ephemeral(object):
 
 class MirroredNotification(_Ephemeral):
     """
-        This class represents a mirrored notification, see https://docs.pushbullet.com/v2/#ephemerals
+        This class represents a mirrored notification, see
+        https://docs.pushbullet.com/v2/#ephemerals
     """
     pb_type = 'mirror'
 
     def dismiss(self):
+        """
+            Dismisses the notification on other devices.
+        """
         if 'notification_tag' in self:
             notification_tag = self['notification_tag']
         else:
@@ -282,6 +320,9 @@ class RealTime(object):
         self._push_cache = []
 
     def connect(self):
+        """
+            Connects to the PushBullet server.
+        """
         url = "wss://stream.pushbullet.com/websocket/"+self.pb.api_key
         push = self.pb.list_pushes(limit=1)
         if push:
@@ -294,6 +335,11 @@ class RealTime(object):
             self._push_modified = self._push_cache[0]['modified']
 
     def get_event(self):
+        """
+            Returns the pending event from the server. If there are no pending
+            events, it blocks until one is available.
+        """
+
         def decrypt_message(data):
             for field in data:
                 if not isinstance(data[field], dict) or \
@@ -334,7 +380,20 @@ class RealTime(object):
 
 
 class PushBullet(object):
+    """
+        Main object for communicating with the PushBullet server
+    """
+
     def __init__(self, api_key, e2e_key=None, user_agent="pyPushBullet", base_url=BASE_URL):
+        """
+            Arguments:
+            api_key -- The API key to use to authenticate with the server.
+            e2e_key -- The password to use for end-to-end encryption.
+            user_agent -- The user agent to report to the server.
+            base_url -- The base URL to use for the PushBullet server. Usually
+                        this should not need to be changed.
+
+        """
         self.api_key = api_key
         self.user_agent = user_agent
         self.base_url = base_url
@@ -437,6 +496,9 @@ class PushBullet(object):
         """
             Sets the password to use for End-to-End Encryption.
             https://docs.pushbullet.com/#end-to-end-encryption
+
+            Arguments:
+            password -- The password to use for End-to-End encryption
         """
         if password is None:
             self._crypto_algo = None
@@ -465,10 +527,13 @@ class PushBullet(object):
             body -- The note's message
             device_iden -- Send the push to a specific device
             email -- Send the push to this email address
-            channel_tag -- Send the push to all subscribers to your channel that has this tag
-            client_iden -- Send the push to all users who have granted access to your OAuth client that has this iden
+            channel_tag -- Send the push to all subscribers to your channel
+                           that has this tag
+            client_iden -- Send the push to all users who have granted access
+                           to your OAuth client that has this iden
 
-            If no target is specified, a push will be sent to all devices, note that only one target can be specified.
+            If no target is specified, a push will be sent to all devices, note
+            that only one target can be specified.
         """
         if not (title or body):
             raise ValidationError("You must specify title or body")
@@ -496,10 +561,13 @@ class PushBullet(object):
             body -- A message associated with the link
             device_iden -- Send the push to a specific device
             email -- Send the push to this email address
-            channel_tag -- Send the push to all subscribers to your channel that has this tag
-            client_iden -- Send the push to all users who have granted access to your OAuth client that has this iden
+            channel_tag -- Send the push to all subscribers to your channel
+                           that has this tag
+            client_iden -- Send the push to all users who have granted access
+                           to your OAuth client that has this iden
 
-            If no target is specified, a push will be sent to all devices, note that only one target can be specified.
+            If no target is specified, a push will be sent to all devices, note
+            that only one target can be specified.
         """
         data = {
             'type': "link",
@@ -520,16 +588,21 @@ class PushBullet(object):
             https://docs.pushbullet.com/#create-push
 
             Arguments:
-            file -- The file to push, can either be a file object or a file path (as a string)
+            file -- The file to push, can either be a file object or a file
+                    path (as a string)
             file_name -- The name of the file
-            file_type -- The MIME type of the file, if not specified, magic will be used to attempt to guess.
+            file_type -- The MIME type of the file, if not specified, magic
+                         will be used to attempt to guess.
             body -- A message associated to go with the file
             device_iden -- Send the push to a specific device
             email -- Send the push to this email address
-            channel_tag -- Send the push to all subscribers to your channel that has this tag
-            client_iden -- Send the push to all users who have granted access to your OAuth client that has this iden
+            channel_tag -- Send the push to all subscribers to your channel
+                           that has this tag
+            client_iden -- Send the push to all users who have granted access
+                           to your OAuth client that has this iden
 
-            If no target is specified, a push will be sent to all devices, note that only one target can be specified.
+            If no target is specified, a push will be sent to all devices, note
+            that only one target can be specified.
         """
         if isinstance(file, str):
             if not file_name:
@@ -585,22 +658,25 @@ class PushBullet(object):
         response = self._request("POST", "pushes", data)
         return Push(self, **response)
 
-    """
-        Sends a mirrored notification and returns a MirroredNotification
-        https://docs.pushbullet.com/v2/#mirrored-notifications
-
-        Arguments:
-        title -- The title of the notification.
-        body -- The body of the notification.
-        icon -- Base64-encoded JPEG image to use as the icon of the push.
-        application_name -- The name of the application that created the notification.
-        dismissible -- True if the notification can be dismissed.
-        package_name -- The package that made the notification, used when updating/dismissing an existing notification.
-        client_version -- The client version of the app sending this message.
-    """
     def push_notification(self, body, title, icon=None, source_device=None,
                           application_name=None, dismissible=True,
                           package_name=None, client_version=None):
+        """
+            Sends a mirrored notification and returns a MirroredNotification
+            https://docs.pushbullet.com/v2/#mirrored-notifications
+
+            Arguments:
+            title -- The title of the notification.
+            body -- The body of the notification.
+            icon -- Base64-encoded JPEG image to use as the icon of the push.
+            application_name -- The name of the application that created the
+                                notification.
+            dismissible -- True if the notification can be dismissed.
+            package_name -- The package that made the notification, used when
+                            updating/dismissing an existing notification.
+            client_version -- The client version of the app sending this
+                              message.
+        """
         if isinstance(source_device, Device):
             source_device = source_device['iden']
 
@@ -645,8 +721,8 @@ class PushBullet(object):
 
     def delete_all_pushes(self):
         """
-            Delete all pushes belonging to the current user. This call is ascynrhonous
-            the pushes will be deleted after the call returns
+            Delete all pushes belonging to the current user. This call is
+            asynchronous the pushes will be deleted after the call returns
             https://docs.pushbullet.com/#delete-all-pushes
         """
         self._request("DELETE", "pushes")
